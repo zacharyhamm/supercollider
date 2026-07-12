@@ -1,0 +1,5 @@
+add_executable(vim_mode_test vim_mode_test.cpp)
+target_link_libraries(vim_mode_test PRIVATE libscide boost_test)
+add_test(NAME ide__vim_mode COMMAND vim_mode_test)
+set_tests_properties(ide__vim_mode PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+set_property(TARGET vim_mode_test PROPERTY FOLDER Test/ide)

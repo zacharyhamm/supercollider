@@ -94,7 +94,7 @@ static void invokeMethodOnFirstResponder(QByteArray const& signature) {
 
 MainWindow* MainWindow::mInstance = 0;
 
-MainWindow::MainWindow(Main* main): mMain(main), mClockLabel(0), mDocDialog(0) {
+MainWindow::MainWindow(Main* main): mMain(main), mClockLabel(0), mVimStatus(0), mDocDialog(0) {
     Q_ASSERT(!mInstance);
     mInstance = this;
 
@@ -106,6 +106,11 @@ MainWindow::MainWindow(Main* main): mMain(main), mClockLabel(0), mDocDialog(0) {
     mServerStatus = new AudioStatusBox(main->scServer());
 
     mStatusBar = statusBar();
+    mVimStatus = new QLabel(this);
+    mVimStatus->setMinimumWidth(fontMetrics().horizontalAdvance(QStringLiteral("VISUAL LINE")) + 12);
+    mVimStatus->setAlignment(Qt::AlignCenter);
+    mVimStatus->hide();
+    mStatusBar->addPermanentWidget(mVimStatus);
     mStatusBar->addPermanentWidget(new QLabel(tr("Interpreter:")));
     mStatusBar->addPermanentWidget(mLangStatus);
     mStatusBar->addPermanentWidget(new QLabel(tr("Server:")));
@@ -1304,6 +1309,11 @@ void MainWindow::lookupReferencesForCursor() {
 void MainWindow::lookupReferences() { Main::findReferences(QString(), QApplication::activeWindow()); }
 
 void MainWindow::showStatusMessage(QString const& string) { mStatusBar->showMessage(string, 3000); }
+
+void MainWindow::updateVimStatus(QString const& mode, bool visible) {
+    mVimStatus->setText(mode);
+    mVimStatus->setVisible(visible);
+}
 
 void MainWindow::applySettings(Settings::Manager* settings) {
     applyCursorBlinkingSettings(settings);

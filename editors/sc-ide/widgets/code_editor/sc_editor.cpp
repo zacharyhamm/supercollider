@@ -21,6 +21,7 @@
 #include "sc_editor.hpp"
 #include "autocompleter.hpp"
 #include "line_indicator.hpp"
+#include "vim_mode.hpp"
 #include "main_window.hpp"
 #include "../util/gui_utilities.hpp"
 #include "../../core/main.hpp"
@@ -46,7 +47,8 @@ ScCodeEditor::ScCodeEditor(Document* doc, QWidget* parent):
     mSpaceIndent(true),
     mBlinkDuration(600),
     mMouseBracketMatch(false),
-    mAutoCompleter(new AutoCompleter(this)) {
+    mAutoCompleter(new AutoCompleter(this)),
+    mVimMode(new VimModeController(this)) {
     Q_ASSERT(mDoc != 0);
 
     connect(this, &ScCodeEditor::cursorPositionChanged, this, &ScCodeEditor::matchBrackets);
@@ -58,6 +60,8 @@ ScCodeEditor::ScCodeEditor(Document* doc, QWidget* parent):
     applySettings(Main::settings());
 }
 
+ScCodeEditor::~ScCodeEditor() { delete mVimMode; }
+
 void ScCodeEditor::applySettings(Settings::Manager* settings) {
     settings->beginGroup("IDE/editor");
 
@@ -68,6 +72,7 @@ void ScCodeEditor::applySettings(Settings::Manager* settings) {
     mStepForwardEvaluation = settings->value("stepForwardEvaluation").toBool();
     mInsertMatchingTokens = settings->value("insertMatchingTokens").toBool();
     mHighlightBracketContents = settings->value("highlightBracketContents").toBool();
+    mVimMode->setEnabled(settings->value("vimMode").toBool());
 
     settings->endGroup();
 
@@ -77,6 +82,18 @@ void ScCodeEditor::applySettings(Settings::Manager* settings) {
 
 bool ScCodeEditor::event(QEvent* e) {
     switch (e->type()) {
+    case QEvent::ShortcutOverride: {
+        if (mVimMode->enabled()) {
+            QKeyEvent* ke = static_cast<QKeyEvent*>(e);
+            if (ke->key() == Qt::Key_Escape || ke->modifiers() == Qt::NoModifier
+                || ke->modifiers() == Qt::ShiftModifier
+                || (ke->modifiers() == Qt::ControlModifier && ke->key() == Qt::Key_R)) {
+                e->accept();
+                return true;
+            }
+        }
+        break;
+    }
     case QEvent::KeyPress: {
         QKeyEvent* ke = static_cast<QKeyEvent*>(e);
         switch (ke->key()) {
@@ -100,6 +117,10 @@ bool ScCodeEditor::event(QEvent* e) {
 
 void ScCodeEditor::keyPressEvent(QKeyEvent* e) {
     hideMouseCursor(e);
+    if (mVimMode->handleKeyPress(e)) {
+        e->accept();
+        return;
+    }
     bool actionInSuper = false;
 
     QTextCursor cursor(textCursor());
@@ -211,6 +232,13 @@ void ScCodeEditor::mouseReleaseEvent(QMouseEvent* e) {
         GenericCodeEditor::mouseReleaseEvent(e);
 
     mMouseBracketMatch = false;
+    mVimMode->mouseRepositioned();
+}
+
+void ScCodeEditor::focusInEvent(QFocusEvent* e) {
+    GenericCodeEditor::focusInEvent(e);
+    if (mVimMode->enabled() && MainWindow::instance())
+        MainWindow::instance()->updateVimStatus(mVimMode->modeName(), true);
 }
 
 void ScCodeEditor::mouseDoubleClickEvent(QMouseEvent* e) {

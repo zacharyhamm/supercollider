@@ -2,9 +2,64 @@ title:: Keyboard Shortcuts
 summary:: Keyboard shortcuts for SuperCollider
 categories:: Frontends
 
-section:: Language-Specific Commands
-
 note:: For shortcuts bindings of teletype::ScIDE::, please consult the menu and/or the shortcut configuration menu.::
+
+section:: Vim Keybindings in ScIDE
+
+ScIDE includes an optional Vim-style modal editing mode. This is separate from the external teletype::scvim:: editor integration listed in the tables below. Enable it from menu::Preferences > Editor > Behavior > Enable Vim keybindings::. It is disabled by default.
+
+When enabled, the status bar shows the current mode: teletype::NORMAL::, teletype::INSERT::, teletype::VISUAL::, or teletype::VISUAL LINE::. The cursor is narrow in Insert mode and character-width in the other modes. Vim commands use an unnamed register shared by all ScIDE editor panes. The standard platform copy, cut, and paste shortcuts continue to use the system clipboard.
+
+subsection:: Modes and insertion
+
+table::
+## strong::Key:: || strong::Action::
+## teletype::i:: || enter Insert mode at the cursor
+## teletype::I:: || enter Insert mode at the start of the line
+## teletype::a:: || enter Insert mode after the cursor
+## teletype::A:: || enter Insert mode at the end of the line
+## teletype::o:: || open a line below and enter Insert mode
+## teletype::O:: || open a line above and enter Insert mode
+## teletype::v:: || enter or leave characterwise Visual mode
+## teletype::V:: || enter or leave linewise Visual mode
+## teletype::Esc:: || return to Normal mode and cancel pending commands
+::
+
+subsection:: Motions
+
+These motions work in Normal and Visual modes and may follow the teletype::d::, teletype::c::, or teletype::y:: operators.
+
+table::
+## strong::Key:: || strong::Action::
+## teletype::h:: / teletype::l:: || move one character left / right
+## teletype::j:: / teletype::k:: || move one line down / up
+## teletype::w:: / teletype::b:: || move to the next / previous word
+## teletype::e:: || move to the end of the word
+## teletype::0:: || move to the start of the line
+## teletype::^:: || move to the first non-whitespace character
+## teletype::$:: || move to the end of the line
+## teletype::gg:: / teletype::G:: || move to the start / end of the document
+::
+
+subsection:: Editing
+
+table::
+## strong::Key:: || strong::Action::
+## teletype::x:: || delete the character under the cursor
+## teletype::d{motion}:: || delete through a supported motion
+## teletype::c{motion}:: || change through a supported motion and enter Insert mode
+## teletype::y{motion}:: || yank through a supported motion
+## teletype::dd:: / teletype::D:: || delete the current line / to the end of the line
+## teletype::cc:: / teletype::C:: || change the current line / to the end of the line
+## teletype::yy:: / teletype::Y:: || yank the current line
+## teletype::p:: / teletype::P:: || paste after / before the cursor or line
+## teletype::u:: / teletype::Ctrl-R:: || undo / redo
+## teletype::d::, teletype::x::, teletype::c::, teletype::y::, teletype::p:: || apply the operation to the Visual selection
+::
+
+Modified ScIDE shortcuts remain active while Vim mode is enabled, including code evaluation, completion, document, and navigation shortcuts. Counts, search, text objects, marks, named registers, macros, repeat with teletype::.::, command-line mode, configurable mappings, and blockwise Visual mode are not currently implemented.
+
+section:: Language-Specific Commands
 
 table::
 ## strong::Functions::

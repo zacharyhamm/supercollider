@@ -68,6 +68,7 @@ void Manager::initDefaults() {
     setDefault("insertMatchingTokens", false);
     setDefault("showLinenumber", true);
     setDefault("showAutocompleteHelp", true);
+    setDefault("vimMode", false);
 
     setDefault("blinkDuration", 600);
 

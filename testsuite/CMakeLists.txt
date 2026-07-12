@@ -1,3 +1,6 @@
 add_subdirectory(server)
 add_subdirectory(sclang)
 add_subdirectory(interpreter)
+if(SC_IDE)
+    add_subdirectory(ide)
+endif()

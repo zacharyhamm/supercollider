@@ -51,6 +51,7 @@ public:
 
 public:
     ScCodeEditor(Document*, QWidget* parent = 0);
+    ~ScCodeEditor();
     QTextCursor currentRegion();
     void blinkCode(const QTextCursor& c);
     bool spaceIndent() { return mSpaceIndent; }
@@ -85,6 +86,7 @@ protected:
     virtual void mouseReleaseEvent(QMouseEvent*);
     virtual void mouseDoubleClickEvent(QMouseEvent*);
     virtual void mouseMoveEvent(QMouseEvent*);
+    virtual void focusInEvent(QFocusEvent*);
     virtual void dragEnterEvent(QDragEnterEvent*);
     virtual bool canInsertFromMimeData(const QMimeData* data) const;
     virtual void insertFromMimeData(const QMimeData* data);
@@ -164,6 +166,7 @@ private:
     bool mMouseBracketMatch;
 
     class AutoCompleter* mAutoCompleter;
+    class VimModeController* mVimMode;
 };
 
 } // namespace ScIDE
