@@ -107,4 +107,49 @@ BOOST_FIXTURE_TEST_CASE(character_and_line_visual, EditorFixture) {
     BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "three");
 }
 
+BOOST_FIXTURE_TEST_CASE(visual_paste_preserves_register, EditorFixture) {
+    editor.setPlainText("source");
+    pressChar(vim, 'v');
+    pressChar(vim, 'e');
+    pressChar(vim, 'y');
+
+    editor.setPlainText("target");
+    pressChar(vim, 'v');
+    pressChar(vim, 'e');
+    pressChar(vim, 'p');
+    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "source");
+
+    editor.setPlainText("target");
+    pressChar(vim, 'v');
+    pressChar(vim, 'e');
+    pressChar(vim, 'p');
+    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "source");
+}
+
+BOOST_FIXTURE_TEST_CASE(backward_visual_includes_anchor, EditorFixture) {
+    editor.setPlainText("abcd");
+    QTextCursor cursor = editor.textCursor();
+    cursor.setPosition(2);
+    editor.setTextCursor(cursor);
+
+    pressChar(vim, 'v');
+    pressChar(vim, 'h');
+    BOOST_CHECK_EQUAL(editor.textCursor().selectedText().toStdString(), "bc");
+    pressChar(vim, 'd');
+    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "ad");
+}
+
+BOOST_FIXTURE_TEST_CASE(upward_visual_line_selects_complete_lines, EditorFixture) {
+    editor.setPlainText("one\ntwo\nthree");
+    QTextCursor cursor = editor.textCursor();
+    cursor.movePosition(QTextCursor::End);
+    editor.setTextCursor(cursor);
+
+    pressChar(vim, 'V');
+    pressChar(vim, 'k');
+    BOOST_CHECK_EQUAL(editor.textCursor().selectedText().toStdString(), "two\u2029three");
+    pressChar(vim, 'd');
+    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "one\n");
+}
+
 BOOST_AUTO_TEST_SUITE_END()

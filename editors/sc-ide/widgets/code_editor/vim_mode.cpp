@@ -331,15 +331,36 @@ void VimModeController::updateVisualSelection() {
         QTextCursor anchorCursor(cursor.document());
         anchorCursor.setPosition(mVisualAnchor);
         anchorCursor.movePosition(QTextCursor::StartOfBlock);
+        const int anchorStart = anchorCursor.position();
+        anchorCursor.movePosition(QTextCursor::EndOfBlock);
+        if (!anchorCursor.atEnd())
+            anchorCursor.movePosition(QTextCursor::NextCharacter);
+
+        cursor.clearSelection();
+        cursor.setPosition(active);
+        cursor.movePosition(QTextCursor::StartOfBlock);
+        const int activeStart = cursor.position();
         cursor.movePosition(QTextCursor::EndOfBlock);
-        if (!cursor.atEnd()) cursor.movePosition(QTextCursor::NextCharacter);
-        cursor.setPosition(anchorCursor.position(), QTextCursor::KeepAnchor);
+        if (!cursor.atEnd())
+            cursor.movePosition(QTextCursor::NextCharacter);
+        const int activeEnd = cursor.position();
+
+        if (activeStart < anchorStart) {
+            cursor.setPosition(anchorCursor.position());
+            cursor.setPosition(activeStart, QTextCursor::KeepAnchor);
+        } else {
+            cursor.setPosition(anchorStart);
+            cursor.setPosition(activeEnd, QTextCursor::KeepAnchor);
+        }
     } else {
-        cursor.setPosition(mVisualAnchor);
-        int end = active;
-        if (end >= mVisualAnchor && end < cursor.document()->characterCount() - 1)
-            ++end;
-        cursor.setPosition(end, QTextCursor::KeepAnchor);
+        const int documentEnd = cursor.document()->characterCount() - 1;
+        if (active < mVisualAnchor) {
+            cursor.setPosition(qMin(mVisualAnchor + 1, documentEnd));
+            cursor.setPosition(active, QTextCursor::KeepAnchor);
+        } else {
+            cursor.setPosition(mVisualAnchor);
+            cursor.setPosition(qMin(active + 1, documentEnd), QTextCursor::KeepAnchor);
+        }
     }
     mEditor->setTextCursor(cursor);
 }
@@ -354,7 +375,11 @@ bool VimModeController::handleVisual(const QString& key) {
     if (key == "d" || key == "x" || key == "c" || key == "y" || key == "p") {
         Operator op = key == "y" ? Operator::Yank : key == "c" ? Operator::Change : Operator::Delete;
         if (key == "p") {
+            const QString registerContents = sRegister;
+            const bool registerLinewise = sRegisterLinewise;
             applySelectionOperator(Operator::Delete);
+            sRegister = registerContents;
+            sRegisterLinewise = registerLinewise;
             paste(true);
         } else applySelectionOperator(op);
         return true;
