@@ -8,7 +8,7 @@ section:: Vim Keybindings in ScIDE
 
 ScIDE includes an optional Vim-style modal editing mode. This is separate from the external teletype::scvim:: editor integration listed in the tables below. Enable it from menu::Preferences > Editor > Behavior > Enable Vim keybindings::. It is disabled by default.
 
-When enabled, the status bar shows the current mode: teletype::NORMAL::, teletype::INSERT::, teletype::VISUAL::, or teletype::VISUAL LINE::. The cursor is narrow in Insert mode and character-width in the other modes. Vim commands use an unnamed register shared by all ScIDE editor panes. The standard platform copy, cut, and paste shortcuts continue to use the system clipboard.
+When enabled, the status bar shows the current mode: teletype::NORMAL::, teletype::INSERT::, teletype::VISUAL::, or teletype::VISUAL LINE::. During a search it instead shows the active teletype::/:: or teletype::?:: prompt. The cursor is narrow in Insert mode and character-width in the other modes. Vim commands use an unnamed register and last-search pattern shared by all ScIDE editor panes. The standard platform copy, cut, and paste shortcuts continue to use the system clipboard.
 
 subsection:: Modes and insertion
 
@@ -27,7 +27,7 @@ table::
 
 subsection:: Motions
 
-These motions work in Normal and Visual modes and may follow the teletype::d::, teletype::c::, or teletype::y:: operators.
+These motions work in Normal and Visual modes and may follow the teletype::d::, teletype::c::, or teletype::y:: operators. A decimal count repeats a motion or command; operator and motion counts multiply, as in teletype::2d3w::.
 
 table::
 ## strong::Key:: || strong::Action::
@@ -35,10 +35,40 @@ table::
 ## teletype::j:: / teletype::k:: || move one line down / up
 ## teletype::w:: / teletype::b:: || move to the next / previous word
 ## teletype::e:: || move to the end of the word
+## teletype::W:: / teletype::B:: / teletype::E:: || move by whitespace-delimited WORDs
 ## teletype::0:: || move to the start of the line
 ## teletype::^:: || move to the first non-whitespace character
 ## teletype::$:: || move to the end of the line
 ## teletype::gg:: / teletype::G:: || move to the start / end of the document
+## teletype::f{char}:: / teletype::F{char}:: || move to the next / previous character on the line
+## teletype::t{char}:: / teletype::T{char}:: || move just before / after that character
+## teletype::;:: / teletype::,:: || repeat the last character motion forward / in reverse
+## teletype::%:: || move to the matching parenthesis, bracket, or brace
+::
+
+subsection:: Search
+
+Search patterns use case-sensitive Qt regular-expression syntax and wrap at document boundaries. The match is previewed while the pattern is typed. Press teletype::Return:: to accept the search or teletype::Esc:: to restore the original cursor position.
+
+table::
+## strong::Key:: || strong::Action::
+## teletype::/:: / teletype::?:: || search forward / backward
+## teletype::n:: / teletype::N:: || repeat the last search in the same / opposite direction
+## teletype::*:: / teletype::#:: || search forward / backward for the word under the cursor
+::
+
+subsection:: Text objects
+
+Text objects may follow teletype::d::, teletype::c::, or teletype::y::, or be used from characterwise Visual mode.
+
+table::
+## strong::Key:: || strong::Action::
+## teletype::iw:: / teletype::aw:: || inner word / word including surrounding whitespace
+## teletype::i(:: / teletype::a(:: || inside / around the enclosing parentheses
+## teletype::i[:: / teletype::a[:: || inside / around the enclosing brackets
+## teletype::i{:: / teletype::a{:: || inside / around the enclosing braces
+## teletype::i":: / teletype::a":: || inside / around double quotes on the current line
+## teletype::i':: / teletype::a':: || inside / around single quotes on the current line
 ::
 
 subsection:: Editing
@@ -46,6 +76,12 @@ subsection:: Editing
 table::
 ## strong::Key:: || strong::Action::
 ## teletype::x:: || delete the character under the cursor
+## teletype::X:: || delete the character before the cursor
+## teletype::s:: / teletype::S:: || substitute characters / whole lines and enter Insert mode
+## teletype::r{char}:: || replace characters without entering Insert mode
+## teletype::~:: || toggle character case and advance
+## teletype::J:: || join lines
+## teletype::>>:: / teletype::<<:: / teletype::==:: || indent / unindent / reindent lines
 ## teletype::d{motion}:: || delete through a supported motion
 ## teletype::c{motion}:: || change through a supported motion and enter Insert mode
 ## teletype::y{motion}:: || yank through a supported motion
@@ -54,10 +90,11 @@ table::
 ## teletype::yy:: / teletype::Y:: || yank the current line
 ## teletype::p:: / teletype::P:: || paste after / before the cursor or line
 ## teletype::u:: / teletype::Ctrl-R:: || undo / redo
+## teletype::.:: || repeat the last Normal-mode document change
 ## teletype::d::, teletype::x::, teletype::c::, teletype::y::, teletype::p:: || apply the operation to the Visual selection
 ::
 
-Modified ScIDE shortcuts remain active while Vim mode is enabled, including code evaluation, completion, document, and navigation shortcuts. Counts, search, text objects, marks, named registers, macros, repeat with teletype::.::, command-line mode, configurable mappings, and blockwise Visual mode are not currently implemented.
+Modified ScIDE shortcuts remain active while Vim mode is enabled, including code evaluation, completion, document, and navigation shortcuts. Marks, named registers, macros, command-line and substitution commands, configurable mappings, and blockwise Visual mode are not currently implemented. Searches are navigation commands and cannot currently be used as operator motions.
 
 section:: Language-Specific Commands
 

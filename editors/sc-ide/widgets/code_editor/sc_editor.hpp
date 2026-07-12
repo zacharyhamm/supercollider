@@ -34,6 +34,8 @@ typedef std::pair<TokenIterator, TokenIterator> BracketPair;
 class ScCodeEditor : public GenericCodeEditor {
     Q_OBJECT
 
+    friend class VimModeController;
+
 public:
     /** \brief Used to indicate whether an edit action should start a new edit
      * block, which affects undo/redo operation grouping.
