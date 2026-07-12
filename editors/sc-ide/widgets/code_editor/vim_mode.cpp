@@ -1212,7 +1212,7 @@ bool VimModeController::performSearch(const QString& pattern, bool forward, int 
         while (it.hasNext()) {
             const int start = it.next().capturedStart();
             if (start < origin || (includeOrigin && start == origin)) result = start;
-            wrapped = start;
+            if (start != origin || includeOrigin) wrapped = start;
         }
         if (result < 0) result = wrapped;
     }

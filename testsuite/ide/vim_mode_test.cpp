@@ -718,6 +718,21 @@ BOOST_FIXTURE_TEST_CASE(search_prompt_repeat_wrap_and_cancel, EditorFixture) {
     BOOST_CHECK_EQUAL(editor.textCursor().position(), 4);
 }
 
+BOOST_FIXTURE_TEST_CASE(backward_search_does_not_repeat_origin_match, EditorFixture) {
+    editor.setPlainText("one");
+    QTextCursor cursor = editor.textCursor();
+    cursor.setPosition(0);
+    editor.setTextCursor(cursor);
+
+    pressChar(vim, '?');
+    pressChar(vim, 'o');
+    pressChar(vim, 'n');
+    pressChar(vim, 'e');
+    press(vim, Qt::Key_Return, QStringLiteral("\n"));
+
+    BOOST_CHECK_EQUAL(editor.textCursor().position(), 0);
+}
+
 BOOST_FIXTURE_TEST_CASE(word_search_is_shared_between_editors, EditorFixture) {
     editor.setPlainText("alpha beta alpha");
     pressChar(vim, '*');
