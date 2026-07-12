@@ -170,6 +170,7 @@ signals:
 
 public Q_SLOTS:
     void showStatusMessage(QString const& string);
+    void updateVimStatus(QString const& mode, bool visible);
 
 private Q_SLOTS:
     void openStartupFile();
@@ -243,6 +244,7 @@ private:
     StatusBox* mLangStatus;
     StatusBox* mServerStatus;
     ClockStatusBox* mClockLabel;
+    QLabel* mVimStatus;
 
     // Docks
     PostDocklet* mPostDocklet;

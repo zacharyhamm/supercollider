@@ -139,6 +139,7 @@ set ( ide_src
     widgets/lang_status_box.cpp
     widgets/code_editor/editor.cpp
     widgets/code_editor/sc_editor.cpp
+    widgets/code_editor/vim_mode.cpp
     widgets/code_editor/highlighter.cpp
     widgets/code_editor/line_indicator.cpp
     widgets/code_editor/overlay.cpp

@@ -1,3 +1,10 @@
+> **Personal fork notice:** This is a personal fork of SuperCollider that adds
+> a Vim mode to the editor. It is not intended to be merged into the upstream
+> SuperCollider main branch and is maintained solely for my own use. That being
+> said, it should work for anyone else the same as the upstream, only with a
+> basic vim editing mode. I will try to track upstream changes when I think to,
+> but this fork may be substantially behind upstream.
+
 [SuperCollider](https://supercollider.github.io/) [![Build Status](https://github.com/supercollider/supercollider/actions/workflows/actions.yml/badge.svg?branch=develop)](https://github.com/supercollider/supercollider/actions/workflows/actions.yml)
 =========================
 

@@ -171,6 +171,13 @@
              </property>
             </widget>
            </item>
+           <item>
+            <widget class="QCheckBox" name="vimMode">
+             <property name="text">
+              <string>Enable Vim keybindings</string>
+             </property>
+            </widget>
+           </item>
           </layout>
          </widget>
         </item>

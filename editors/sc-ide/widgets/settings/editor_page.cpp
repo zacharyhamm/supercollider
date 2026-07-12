@@ -90,6 +90,7 @@ void EditorPage::load(Manager* s) {
     ui->editorLineWrap->setChecked(s->value("lineWrap").toBool());
     ui->disableBlinkingCursor->setChecked(s->value("disableBlinkingCursor").toBool());
     ui->insertMatchingTokens->setChecked(s->value("insertMatchingTokens").toBool());
+    ui->vimMode->setChecked(s->value("vimMode").toBool());
     ui->blinkDuration->setValue(s->value("blinkDuration").toInt());
     ui->highlightCurrentLine->setChecked(s->value("highlightCurrentLine").toBool());
     ui->highlightBracketContents->setChecked(s->value("highlightBracketContents").toBool());
@@ -265,6 +266,7 @@ void EditorPage::store(Manager* s) {
     s->setValue("lineWrap", ui->editorLineWrap->isChecked());
     s->setValue("disableBlinkingCursor", ui->disableBlinkingCursor->isChecked());
     s->setValue("insertMatchingTokens", ui->insertMatchingTokens->isChecked());
+    s->setValue("vimMode", ui->vimMode->isChecked());
     s->setValue("highlightCurrentLine", ui->highlightCurrentLine->isChecked());
     s->setValue("highlightBracketContents", ui->highlightBracketContents->isChecked());
     s->setValue("inactiveEditorFadeAlpha", ui->inactiveEditorFadeAlpha->value());
