@@ -237,8 +237,16 @@ void ScCodeEditor::mouseReleaseEvent(QMouseEvent* e) {
 
 void ScCodeEditor::focusInEvent(QFocusEvent* e) {
     GenericCodeEditor::focusInEvent(e);
-    if (mVimMode->enabled() && MainWindow::instance())
-        MainWindow::instance()->updateVimStatus(mVimMode->modeName(), true);
+    if (MainWindow::instance()) {
+        bool vimEnabled = mVimMode->enabled();
+        MainWindow::instance()->updateVimStatus(vimEnabled ? mVimMode->modeName() : QString(), vimEnabled);
+    }
+}
+
+void ScCodeEditor::focusOutEvent(QFocusEvent* e) {
+    GenericCodeEditor::focusOutEvent(e);
+    if (MainWindow::instance())
+        MainWindow::instance()->updateVimStatus(QString(), false);
 }
 
 void ScCodeEditor::mouseDoubleClickEvent(QMouseEvent* e) {

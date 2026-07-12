@@ -89,6 +89,7 @@ protected:
     virtual void mouseDoubleClickEvent(QMouseEvent*);
     virtual void mouseMoveEvent(QMouseEvent*);
     virtual void focusInEvent(QFocusEvent*);
+    virtual void focusOutEvent(QFocusEvent*);
     virtual void dragEnterEvent(QDragEnterEvent*);
     virtual bool canInsertFromMimeData(const QMimeData* data) const;
     virtual void insertFromMimeData(const QMimeData* data);

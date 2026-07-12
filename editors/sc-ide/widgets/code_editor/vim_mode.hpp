@@ -49,7 +49,7 @@ private:
     bool applyTextObject(Operator op, bool inner, QChar object, int count, bool visual);
     bool selectTextObject(QTextCursor& cursor, bool inner, QChar object, int count);
     void enterMode(Mode mode);
-    void enterInsertAt(QTextCursor::MoveOperation operation = QTextCursor::NoMove);
+    void enterInsertAt(QTextCursor::MoveOperation operation = QTextCursor::NoMove, int count = 1);
     void openLine(bool above, int count = 1);
     void paste(bool before, int count = 1);
     void deleteCharacter(int count = 1, bool backwards = false);
@@ -103,6 +103,7 @@ private:
     bool mRecordingInsert { false };
     bool mReplaying { false };
     bool mChangeEditBlockOpen { false };
+    int mInsertCount { 1 };
     int mCommandRevision { 0 };
     QString mCommandKeys;
     QVector<InsertAction> mCommandInsertActions;
