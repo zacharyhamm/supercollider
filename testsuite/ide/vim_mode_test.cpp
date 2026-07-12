@@ -45,10 +45,59 @@ void typeText(VimModeController& vim, QPlainTextEdit& editor, const QString& tex
     }
 }
 
+void backspace(VimModeController& vim, QPlainTextEdit& editor) {
+    if (!press(vim, Qt::Key_Backspace)) {
+        QTextCursor cursor = editor.textCursor();
+        cursor.deletePreviousChar();
+        editor.setTextCursor(cursor);
+    }
+}
+
 struct EditorFixture {
     EditorFixture(): ignored(application()), vim(&editor) { vim.setEnabled(true); }
     QApplication* ignored;
     QPlainTextEdit editor;
+    VimModeController vim;
+};
+
+class TransformingEditor : public QPlainTextEdit {
+public:
+    VimModeController* vim { nullptr };
+
+protected:
+    void keyPressEvent(QKeyEvent* event) override {
+        if (vim && vim->handleKeyPress(event))
+            return;
+        if (event->key() == Qt::Key_Tab) {
+            insertPlainText(QStringLiteral("  "));
+        } else if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
+            insertPlainText(QStringLiteral("\n  "));
+        } else if (event->text() == QStringLiteral("(")) {
+            insertPlainText(QStringLiteral("()"));
+            moveCursor(QTextCursor::PreviousCharacter);
+        } else {
+            QPlainTextEdit::keyPressEvent(event);
+        }
+    }
+};
+
+struct TransformingEditorFixture {
+    TransformingEditorFixture(): ignored(application()), vim(&editor) {
+        editor.vim = &vim;
+        vim.setEnabled(true);
+    }
+
+    void send(int key, const QString& text = QString(), Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
+        QKeyEvent event(QEvent::KeyPress, key, modifiers, text);
+        QApplication::sendEvent(&editor, &event);
+    }
+
+    void sendChar(QChar value) {
+        send(value.toUpper().unicode(), QString(value), value.isUpper() ? Qt::ShiftModifier : Qt::NoModifier);
+    }
+
+    QApplication* ignored;
+    TransformingEditor editor;
     VimModeController vim;
 };
 
@@ -171,6 +220,25 @@ BOOST_FIXTURE_TEST_CASE(motions_and_operator_motion, EditorFixture) {
     BOOST_CHECK(!press(vim, Qt::Key_S, "s", Qt::ControlModifier));
 }
 
+BOOST_FIXTURE_TEST_CASE(end_of_word_stops_on_the_final_character, EditorFixture) {
+    editor.setPlainText("abc def ghi");
+    pressChar(vim, 'e');
+    BOOST_CHECK_EQUAL(editor.textCursor().position(), 2);
+    pressChar(vim, '2');
+    pressChar(vim, 'e');
+    BOOST_CHECK_EQUAL(editor.textCursor().position(), 10);
+
+    editor.setPlainText("abc def");
+    pressChar(vim, 'd');
+    pressChar(vim, 'e');
+    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), " def");
+
+    editor.setPlainText("abc def");
+    pressChar(vim, 'v');
+    pressChar(vim, 'e');
+    BOOST_CHECK_EQUAL(editor.textCursor().selectedText().toStdString(), "abc");
+}
+
 BOOST_FIXTURE_TEST_CASE(end_of_line_operators_preserve_the_separator, EditorFixture) {
     editor.setPlainText("abc\ndef");
     QTextCursor cursor = editor.textCursor();
@@ -253,6 +321,65 @@ BOOST_FIXTURE_TEST_CASE(vertical_operator_motions_are_linewise, EditorFixture) {
     BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "last\nabc\ndef");
 }
 
+BOOST_FIXTURE_TEST_CASE(vertical_operator_counts_clamp_to_document_boundaries, EditorFixture) {
+    editor.setPlainText("abc\ndef\nghi");
+    pressChar(vim, 'd');
+    pressChar(vim, '9');
+    pressChar(vim, 'j');
+    BOOST_CHECK(editor.toPlainText().isEmpty());
+
+    editor.setPlainText("abc\ndef\nghi");
+    QTextCursor cursor = editor.textCursor();
+    cursor.movePosition(QTextCursor::End);
+    editor.setTextCursor(cursor);
+    pressChar(vim, 'd');
+    pressChar(vim, '9');
+    pressChar(vim, 'k');
+    BOOST_CHECK(editor.toPlainText().isEmpty());
+
+    editor.setPlainText("abc\ndef\nghi");
+    pressChar(vim, 'c');
+    pressChar(vim, '9');
+    pressChar(vim, 'j');
+    typeText(vim, editor, QStringLiteral("x"));
+    press(vim, Qt::Key_Escape);
+    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "x");
+
+    editor.setPlainText("abc\ndef\nghi");
+    cursor = editor.textCursor();
+    cursor.movePosition(QTextCursor::End);
+    editor.setTextCursor(cursor);
+    pressChar(vim, 'y');
+    pressChar(vim, '9');
+    pressChar(vim, 'k');
+    editor.setPlainText("target");
+    pressChar(vim, 'p');
+    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "target\nabc\ndef\nghi");
+}
+
+BOOST_FIXTURE_TEST_CASE(append_on_empty_line_does_not_cross_to_next_line, EditorFixture) {
+    editor.setPlainText("\nnext");
+    pressChar(vim, 'a');
+    typeText(vim, editor, QStringLiteral("x"));
+    press(vim, Qt::Key_Escape);
+    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "x\nnext");
+}
+
+BOOST_FIXTURE_TEST_CASE(mouse_selection_is_normalized_before_normal_command, EditorFixture) {
+    editor.setPlainText("abcdef");
+    QTextCursor cursor = editor.textCursor();
+    cursor.setPosition(1);
+    cursor.setPosition(4, QTextCursor::KeepAnchor);
+    editor.setTextCursor(cursor);
+
+    vim.mouseRepositioned();
+    BOOST_CHECK(!editor.textCursor().hasSelection());
+    BOOST_CHECK_EQUAL(editor.textCursor().position(), 4);
+
+    pressChar(vim, 'x');
+    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "abcdf");
+}
+
 BOOST_FIXTURE_TEST_CASE(line_delete_yank_and_shared_paste, EditorFixture) {
     editor.setPlainText("alpha\nbeta\ngamma");
     QTextCursor cursor = editor.textCursor();
@@ -330,7 +457,7 @@ BOOST_FIXTURE_TEST_CASE(character_and_line_visual, EditorFixture) {
     pressChar(vim, 'y');
     BOOST_CHECK(vim.mode() == VimModeController::Mode::Normal);
     pressChar(vim, 'P');
-    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "abc abc def\nsecond");
+    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "abcabc def\nsecond");
 
     editor.setPlainText("one\ntwo\nthree");
     pressChar(vim, 'V');
@@ -600,6 +727,55 @@ BOOST_FIXTURE_TEST_CASE(dot_repeats_changes_and_inserted_text, EditorFixture) {
     pressChar(vim, 'x');
     pressChar(vim, '.');
     BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "ef");
+}
+
+BOOST_FIXTURE_TEST_CASE(dot_replays_insert_mode_backspaces_in_order, EditorFixture) {
+    editor.setPlainText("abc");
+    pressChar(vim, 'a');
+    backspace(vim, editor);
+    press(vim, Qt::Key_Escape);
+    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "bc");
+    pressChar(vim, '.');
+    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "c");
+
+    editor.setPlainText("abc");
+    pressChar(vim, 'a');
+    typeText(vim, editor, QStringLiteral("x"));
+    backspace(vim, editor);
+    backspace(vim, editor);
+    typeText(vim, editor, QStringLiteral("y"));
+    press(vim, Qt::Key_Escape);
+    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "ybc");
+    pressChar(vim, 'l');
+    pressChar(vim, '.');
+    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "yyc");
+}
+
+BOOST_FIXTURE_TEST_CASE(dot_replays_insert_keys_through_editor_behavior, TransformingEditorFixture) {
+    editor.setPlainText("one");
+    sendChar('A');
+    send(Qt::Key_Return, QStringLiteral("\n"));
+    sendChar('x');
+    send(Qt::Key_Escape);
+    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "one\n  x");
+    sendChar('.');
+    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "one\n  x\n  x");
+
+    editor.setPlainText(QString());
+    sendChar('i');
+    send(Qt::Key_Tab, QStringLiteral("\t"));
+    send(Qt::Key_Escape);
+    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "  ");
+    sendChar('.');
+    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "    ");
+
+    editor.setPlainText(QString());
+    sendChar('i');
+    sendChar('(');
+    send(Qt::Key_Escape);
+    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "()");
+    sendChar('.');
+    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "()()");
 }
 
 BOOST_FIXTURE_TEST_CASE(change_operator_and_insert_are_one_undo_step, EditorFixture) {

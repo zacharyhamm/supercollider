@@ -2,6 +2,7 @@
 
 #include <QTextCursor>
 #include <QString>
+#include <QVector>
 
 class QKeyEvent;
 class QPlainTextEdit;
@@ -25,6 +26,12 @@ public:
     void mouseRepositioned();
 
 private:
+    struct InsertAction {
+        int key;
+        int modifiers;
+        QString text;
+    };
+
     enum class Operator { None, Delete, Change, Yank };
     enum class CharCommand { None, FindForward, FindBackward, TillForward, TillBackward, Replace };
     enum class LineCommand { None, Indent, Unindent, Reindent };
@@ -98,9 +105,9 @@ private:
     bool mChangeEditBlockOpen { false };
     int mCommandRevision { 0 };
     QString mCommandKeys;
-    QString mCommandInsertText;
+    QVector<InsertAction> mCommandInsertActions;
     QString mLastChangeKeys;
-    QString mLastChangeInsertText;
+    QVector<InsertAction> mLastChangeInsertActions;
 
     static QString sRegister;
     static bool sRegisterLinewise;

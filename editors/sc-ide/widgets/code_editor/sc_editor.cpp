@@ -94,8 +94,7 @@ bool ScCodeEditor::event(QEvent* e) {
         QKeyEvent* ke = static_cast<QKeyEvent*>(e);
         switch (ke->key()) {
         case Qt::Key_Tab:
-            if (mVimMode->enabled() && mVimMode->mode() != VimModeController::Mode::Insert
-                && mVimMode->handleKeyPress(ke)) {
+            if (mVimMode->enabled() && mVimMode->handleKeyPress(ke)) {
                 e->accept();
                 return true;
             }
