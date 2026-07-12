@@ -22,6 +22,14 @@ namespace {
 
 bool isWordCharacter(QChar ch) { return ch.isLetterOrNumber() || ch == QLatin1Char('_'); }
 
+int wordObjectClass(QChar ch) {
+    if (ch == QLatin1Char('\n'))
+        return 0;
+    if (ch.isSpace())
+        return 1;
+    return isWordCharacter(ch) ? 2 : 3;
+}
+
 bool isEscaped(const QString& text, int position) {
     int slashes = 0;
     while (position > 0 && text.at(--position) == QLatin1Char('\\'))
@@ -231,6 +239,7 @@ void VimModeController::normalizeNormalCursor() {
     if (cursor.atBlockEnd() && cursor.positionInBlock() > 0)
         cursor.movePosition(QTextCursor::PreviousCharacter);
     mEditor->setTextCursor(cursor);
+    updateCursorAppearance();
 }
 
 void VimModeController::enterInsertAt(QTextCursor::MoveOperation operation, int count) {
@@ -913,26 +922,42 @@ void VimModeController::indentLines(LineCommand command, int count) {
 
 bool VimModeController::selectTextObject(QTextCursor& cursor, bool inner, QChar object, int count) {
     const QString text = cursor.document()->toPlainText();
-        int position = qMin(cursor.position(), text.size() - 1);
+    int position = qMin(cursor.position(), text.size() - 1);
     int start = -1;
     int end = -1;
     if (object == QLatin1Char('w')) {
-        if (position < 0) return false;
-        if (!isWordCharacter(text.at(position)) && position > 0 && isWordCharacter(text.at(position - 1))) --position;
-        if (!isWordCharacter(text.at(position))) return false;
+        if (position < 0 || wordObjectClass(text.at(position)) == 0)
+            return false;
+        const int initialClass = wordObjectClass(text.at(position));
         start = position;
-        while (start > 0 && isWordCharacter(text.at(start - 1))) --start;
+        while (start > 0 && wordObjectClass(text.at(start - 1)) == initialClass) --start;
         end = position + 1;
-        while (end < text.size() && isWordCharacter(text.at(end))) ++end;
-        for (int n = 1; n < count; ++n) {
-            while (end < text.size() && !isWordCharacter(text.at(end))) ++end;
-            while (end < text.size() && isWordCharacter(text.at(end))) ++end;
-        }
-        if (!inner) {
-            int trailing = end;
-            while (trailing < text.size() && text.at(trailing).isSpace() && text.at(trailing) != QLatin1Char('\n')) ++trailing;
-            if (trailing > end) end = trailing;
-            else while (start > 0 && text.at(start - 1).isSpace() && text.at(start - 1) != QLatin1Char('\n')) --start;
+        while (end < text.size() && wordObjectClass(text.at(end)) == initialClass) ++end;
+        if (inner) {
+            for (int n = 1; n < count && end < text.size() && wordObjectClass(text.at(end)) != 0; ++n) {
+                const int nextClass = wordObjectClass(text.at(end));
+                while (end < text.size() && wordObjectClass(text.at(end)) == nextClass) ++end;
+            }
+        } else {
+            if (initialClass == 1) {
+                if (end < text.size() && wordObjectClass(text.at(end)) != 0) {
+                    const int nextClass = wordObjectClass(text.at(end));
+                    while (end < text.size() && wordObjectClass(text.at(end)) == nextClass) ++end;
+                }
+            }
+            for (int n = 1; n < count; ++n) {
+                while (end < text.size() && wordObjectClass(text.at(end)) == 1) ++end;
+                if (end >= text.size() || wordObjectClass(text.at(end)) == 0)
+                    break;
+                const int nextClass = wordObjectClass(text.at(end));
+                while (end < text.size() && wordObjectClass(text.at(end)) == nextClass) ++end;
+            }
+            if (initialClass != 1) {
+                int trailing = end;
+                while (trailing < text.size() && wordObjectClass(text.at(trailing)) == 1) ++trailing;
+                if (trailing > end) end = trailing;
+                else while (start > 0 && wordObjectClass(text.at(start - 1)) == 1) --start;
+            }
         }
     } else if (QStringLiteral("([{\"").contains(object) || object == QLatin1Char('\'')) {
         if (object == QLatin1Char('"') || object == QLatin1Char('\'')) {
@@ -1133,6 +1158,13 @@ void VimModeController::applySelectionOperator(Operator op) {
     sRegisterLinewise = mMode == Mode::VisualLine;
     if (sRegisterLinewise && !sRegister.endsWith('\n')) sRegister.append('\n');
     if (op != Operator::Yank) {
+        const int documentEnd = cursor.document()->characterCount() - 1;
+        if (op == Operator::Delete && sRegisterLinewise && cursor.selectionStart() > 0
+            && cursor.selectionEnd() == documentEnd) {
+            const int start = cursor.selectionStart();
+            cursor.setPosition(start - 1);
+            cursor.setPosition(documentEnd, QTextCursor::KeepAnchor);
+        }
         if (op == Operator::Change)
             beginChangeEditBlock();
         else

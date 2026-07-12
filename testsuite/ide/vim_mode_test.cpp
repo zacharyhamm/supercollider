@@ -2,6 +2,8 @@
 
 #include <boost/test/unit_test.hpp>
 #include <QApplication>
+#include <QFontDatabase>
+#include <QFontMetrics>
 #include <QKeyEvent>
 #include <QPlainTextEdit>
 #include <QTextBlock>
@@ -603,7 +605,27 @@ BOOST_FIXTURE_TEST_CASE(upward_visual_line_selects_complete_lines, EditorFixture
     pressChar(vim, 'k');
     BOOST_CHECK_EQUAL(editor.textCursor().selectedText().toStdString(), "two\u2029three");
     pressChar(vim, 'd');
-    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "one\n");
+    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "one");
+}
+
+BOOST_FIXTURE_TEST_CASE(visual_line_delete_removes_separator_before_final_line, EditorFixture) {
+    editor.setPlainText("one\ntwo");
+    QTextCursor cursor = editor.textCursor();
+    cursor.movePosition(QTextCursor::NextBlock);
+    editor.setTextCursor(cursor);
+    pressChar(vim, 'V');
+    pressChar(vim, 'd');
+    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "one");
+
+    pressChar(vim, 'p');
+    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "one\ntwo");
+
+    cursor = editor.textCursor();
+    cursor.movePosition(QTextCursor::End);
+    editor.setTextCursor(cursor);
+    pressChar(vim, 'V');
+    pressChar(vim, 'x');
+    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "one");
 }
 
 BOOST_FIXTURE_TEST_CASE(counts_compose_with_motions_and_operators, EditorFixture) {
@@ -775,6 +797,70 @@ BOOST_FIXTURE_TEST_CASE(word_bracket_and_quote_text_objects, EditorFixture) {
     pressChar(vim, 'i');
     pressChar(vim, '\'');
     BOOST_CHECK_EQUAL(editor.textCursor().selectedText().toStdString(), "hello world");
+}
+
+BOOST_FIXTURE_TEST_CASE(word_text_objects_include_punctuation_and_whitespace_runs, EditorFixture) {
+    editor.setPlainText("one +-= two");
+    QTextCursor cursor = editor.textCursor();
+    cursor.setPosition(5);
+    editor.setTextCursor(cursor);
+    pressChar(vim, 'd');
+    pressChar(vim, 'i');
+    pressChar(vim, 'w');
+    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "one  two");
+
+    editor.setPlainText("one   two");
+    cursor = editor.textCursor();
+    cursor.setPosition(4);
+    editor.setTextCursor(cursor);
+    pressChar(vim, 'd');
+    pressChar(vim, 'i');
+    pressChar(vim, 'w');
+    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "onetwo");
+
+    editor.setPlainText("one +-= two");
+    cursor = editor.textCursor();
+    cursor.setPosition(5);
+    editor.setTextCursor(cursor);
+    pressChar(vim, 'd');
+    pressChar(vim, 'a');
+    pressChar(vim, 'w');
+    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "one two");
+
+    editor.setPlainText("one   two");
+    cursor = editor.textCursor();
+    cursor.setPosition(4);
+    editor.setTextCursor(cursor);
+    pressChar(vim, 'd');
+    pressChar(vim, 'a');
+    pressChar(vim, 'w');
+    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "one");
+}
+
+BOOST_AUTO_TEST_CASE(normalization_refreshes_block_cursor_width) {
+    application();
+    QPlainTextEdit editor;
+    editor.setFont(QFontDatabase::systemFont(QFontDatabase::GeneralFont));
+
+    const QFontMetrics metrics(editor.font());
+    const QString candidates = QStringLiteral("iWm.|");
+    QChar narrow = candidates.at(0);
+    QChar wide = candidates.at(0);
+    for (QChar candidate : candidates) {
+        if (metrics.horizontalAdvance(candidate) < metrics.horizontalAdvance(narrow)) narrow = candidate;
+        if (metrics.horizontalAdvance(candidate) > metrics.horizontalAdvance(wide)) wide = candidate;
+    }
+    BOOST_REQUIRE_NE(metrics.horizontalAdvance(narrow), metrics.horizontalAdvance(wide));
+
+    editor.setPlainText(QString(narrow) + wide);
+    VimModeController vim(&editor);
+    vim.setEnabled(true);
+    BOOST_CHECK_EQUAL(editor.cursorWidth(), qMax(2, metrics.horizontalAdvance(narrow)));
+
+    pressChar(vim, 'f');
+    pressChar(vim, wide);
+    BOOST_CHECK_EQUAL(editor.textCursor().position(), 1);
+    BOOST_CHECK_EQUAL(editor.cursorWidth(), qMax(2, metrics.horizontalAdvance(wide)));
 }
 
 BOOST_FIXTURE_TEST_CASE(expected_editing_commands, EditorFixture) {
@@ -1176,7 +1262,7 @@ BOOST_FIXTURE_TEST_CASE(counted_visual_gg_targets_the_requested_line, EditorFixt
     pressChar(vim, 'g');
     pressChar(vim, 'g');
     pressChar(vim, 'd');
-    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "one\n");
+    BOOST_CHECK_EQUAL(editor.toPlainText().toStdString(), "one");
 }
 
 BOOST_FIXTURE_TEST_CASE(counted_open_lines_repeat_insertions, EditorFixture) {
