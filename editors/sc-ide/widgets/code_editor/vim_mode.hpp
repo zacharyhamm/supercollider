@@ -40,7 +40,8 @@ private:
     bool handleVisual(const QString& key);
     bool handleSearchKey(QKeyEvent* event);
     bool move(const QString& key, QTextCursor& cursor, QTextCursor::MoveMode selectionMode, int count = 1);
-    bool moveCharacter(QTextCursor& cursor, QChar target, CharCommand command, int count);
+    bool moveCharacter(QTextCursor& cursor, QChar target, CharCommand command, int count, bool repeated = false);
+    bool repeatCharacterMotion(QTextCursor& cursor, bool reverse, int count);
     bool applyOperator(Operator op, const QString& motion, int count);
     void applyRangeOperator(Operator op, int origin, int destination, bool inclusive);
     void applyLineOperator(Operator op, int count = 1);
@@ -58,6 +59,7 @@ private:
     void joinLines(int count);
     void indentLines(LineCommand command, int count);
     void normalizeNormalCursor();
+    int visualActivePosition(const QTextCursor& cursor) const;
     void updateVisualSelection();
     void updateCursorAppearance();
     void notifyMode();
@@ -72,8 +74,10 @@ private:
     int takeCount();
     bool commandPending() const;
     void beginCommandRecording(const QString& key);
+    void cancelCommandRecording();
     void finishCommandRecording();
     void recordInsertKey(QKeyEvent* event);
+    void completeInsertRepetitions(const QVector<InsertAction>& actions, bool initialInsertionApplied);
     void repeatLastChange(int count);
     void beginChangeEditBlock();
     void endChangeEditBlock();
@@ -104,6 +108,7 @@ private:
     bool mReplaying { false };
     bool mChangeEditBlockOpen { false };
     int mInsertCount { 1 };
+    int mOpenLineCount { 0 };
     int mCommandRevision { 0 };
     QString mCommandKeys;
     QVector<InsertAction> mCommandInsertActions;

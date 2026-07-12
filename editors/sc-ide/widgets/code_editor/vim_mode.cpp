@@ -53,6 +53,8 @@ void VimModeController::setEnabled(bool enabled) {
     resetPending();
     mSearching = false;
     mRecordingCommand = false;
+    mInsertCount = 1;
+    mOpenLineCount = 0;
     if (enabled)
         enterMode(Mode::Normal);
     else {
@@ -104,21 +106,7 @@ bool VimModeController::handleKeyPress(QKeyEvent* event) {
     if (event->key() == Qt::Key_Escape) {
         if (mMode == Mode::Insert) {
             const QVector<InsertAction> actions = mCommandInsertActions;
-            const bool wasReplaying = mReplaying;
-            mReplaying = true;
-            for (int repetition = 1; repetition < mInsertCount; ++repetition) {
-                for (const InsertAction& action : actions) {
-                    QKeyEvent repeatedEvent(QEvent::KeyPress, action.key, Qt::KeyboardModifiers(action.modifiers),
-                                            action.text);
-                    QCoreApplication::sendEvent(mEditor, &repeatedEvent);
-                }
-            }
-            mReplaying = wasReplaying;
-            mInsertCount = 1;
-            QTextCursor cursor = mEditor->textCursor();
-            if (cursor.positionInBlock() > 0)
-                cursor.movePosition(QTextCursor::PreviousCharacter);
-            mEditor->setTextCursor(cursor);
+            completeInsertRepetitions(actions, true);
         }
         enterMode(Mode::Normal);
         finishCommandRecording();
@@ -142,15 +130,22 @@ bool VimModeController::handleKeyPress(QKeyEvent* event) {
         normalizeNormalCursor();
         return true;
     }
-    if (event->modifiers() != Qt::NoModifier && event->modifiers() != Qt::ShiftModifier)
-        return false;
+    if (event->modifiers() != Qt::NoModifier && event->modifiers() != Qt::ShiftModifier) {
+        const bool producesModifiedText = event->modifiers().testFlag(Qt::AltModifier)
+            || event->modifiers().testFlag(Qt::GroupSwitchModifier);
+        return producesModifiedText && !event->text().isEmpty();
+    }
 
     QString key = event->text();
     if (key.isEmpty())
         return true;
 
-    if (mMode != Mode::Normal)
-        return handleVisual(key);
+    if (mMode != Mode::Normal) {
+        const bool handled = handleVisual(key);
+        if (mRecordingCommand && mMode != Mode::Visual && mMode != Mode::VisualLine)
+            cancelCommandRecording();
+        return handled;
+    }
 
     const bool recordable = key != QStringLiteral("u") && key != QStringLiteral(".") && key != QStringLiteral("n")
         && key != QStringLiteral("N") && key != QStringLiteral("*") && key != QStringLiteral("#")
@@ -255,16 +250,15 @@ void VimModeController::openLine(bool above, int count) {
     beginChangeEditBlock();
     if (above) {
         cursor.movePosition(QTextCursor::StartOfBlock);
-        for (int i = 0; i < count; ++i)
-            cursor.insertBlock();
+        cursor.insertBlock();
         cursor.movePosition(QTextCursor::PreviousBlock);
     } else {
         cursor.movePosition(QTextCursor::EndOfBlock);
-        for (int i = 0; i < count; ++i)
-            cursor.insertBlock();
+        cursor.insertBlock();
     }
     mEditor->setTextCursor(cursor);
     enterMode(Mode::Insert);
+    mOpenLineCount = count;
 }
 
 int VimModeController::takeCount() {
@@ -278,12 +272,18 @@ bool VimModeController::move(const QString& key, QTextCursor& cursor, QTextCurso
         count = 1;
     QTextCursor::MoveOperation op = QTextCursor::NoMove;
     if (key == "h") {
-        const int destination = qMax(cursor.block().position(), cursor.position() - count);
-        cursor.setPosition(destination, mode);
+        const int blockStart = cursor.block().position();
+        for (int i = 0; i < count && cursor.position() > blockStart; ++i)
+            cursor.movePosition(QTextCursor::PreviousCharacter, mode);
         return true;
     } else if (key == "l") {
-        const int destination = qMin(cursor.block().position() + cursor.block().length() - 1, cursor.position() + count);
-        cursor.setPosition(destination, mode);
+        QTextCursor blockEnd(cursor);
+        blockEnd.movePosition(QTextCursor::EndOfBlock);
+        if (blockEnd.positionInBlock() > 0)
+            blockEnd.movePosition(QTextCursor::PreviousCharacter);
+        const int lastCharacter = blockEnd.position();
+        for (int i = 0; i < count && cursor.position() < lastCharacter; ++i)
+            cursor.movePosition(QTextCursor::NextCharacter, mode);
         return true;
     } else if (key == "j") op = QTextCursor::Down;
     else if (key == "k") op = QTextCursor::Up;
@@ -381,27 +381,54 @@ bool VimModeController::move(const QString& key, QTextCursor& cursor, QTextCurso
     return true;
 }
 
-bool VimModeController::moveCharacter(QTextCursor& cursor, QChar target, CharCommand command, int count) {
+bool VimModeController::moveCharacter(QTextCursor& cursor, QChar target, CharCommand command, int count, bool repeated) {
     const QString line = cursor.block().text();
     int position = cursor.positionInBlock();
     int found = -1;
     if (command == CharCommand::FindForward || command == CharCommand::TillForward) {
+        if (repeated && command == CharCommand::TillForward) {
+            QTextCursor previousTarget(cursor);
+            previousTarget.movePosition(QTextCursor::NextCharacter);
+            position = previousTarget.positionInBlock();
+        }
         for (int n = 0; n < count; ++n) {
             found = line.indexOf(target, position + 1);
             if (found < 0) return false;
             position = found;
         }
-        if (command == CharCommand::TillForward) --position;
     } else {
+        if (repeated && command == CharCommand::TillBackward) {
+            QTextCursor previousTarget(cursor);
+            previousTarget.movePosition(QTextCursor::PreviousCharacter);
+            position = previousTarget.positionInBlock();
+        }
         for (int n = 0; n < count; ++n) {
-            found = line.lastIndexOf(target, position - 1);
+            const int searchFrom = position - 1;
+            if (searchFrom < 0) return false;
+            found = line.lastIndexOf(target, searchFrom);
             if (found < 0) return false;
             position = found;
         }
-        if (command == CharCommand::TillBackward) ++position;
     }
     cursor.setPosition(cursor.block().position() + position);
+    if (command == CharCommand::TillForward)
+        cursor.movePosition(QTextCursor::PreviousCharacter);
+    else if (command == CharCommand::TillBackward)
+        cursor.movePosition(QTextCursor::NextCharacter);
     return true;
+}
+
+bool VimModeController::repeatCharacterMotion(QTextCursor& cursor, bool reverse, int count) {
+    if (mLastCharCommand == CharCommand::None)
+        return false;
+    CharCommand command = mLastCharCommand;
+    if (reverse) {
+        if (command == CharCommand::FindForward) command = CharCommand::FindBackward;
+        else if (command == CharCommand::FindBackward) command = CharCommand::FindForward;
+        else if (command == CharCommand::TillForward) command = CharCommand::TillBackward;
+        else if (command == CharCommand::TillBackward) command = CharCommand::TillForward;
+    }
+    return moveCharacter(cursor, mLastFindCharacter, command, count, !reverse);
 }
 
 bool VimModeController::handleNormal(const QString& key) {
@@ -501,19 +528,10 @@ bool VimModeController::handleNormal(const QString& key) {
             mPendingOperator = Operator::None;
             const int count = mOperatorCount * takeCount();
             mOperatorCount = 1;
-            if (mLastCharCommand != CharCommand::None) {
-                CharCommand command = mLastCharCommand;
-                if (key == ",") {
-                    if (command == CharCommand::FindForward) command = CharCommand::FindBackward;
-                    else if (command == CharCommand::FindBackward) command = CharCommand::FindForward;
-                    else if (command == CharCommand::TillForward) command = CharCommand::TillBackward;
-                    else if (command == CharCommand::TillBackward) command = CharCommand::TillForward;
-                }
-                QTextCursor cursor = mEditor->textCursor();
-                const int origin = cursor.position();
-                if (moveCharacter(cursor, mLastFindCharacter, command, count))
-                    applyRangeOperator(op, origin, cursor.position(), true);
-            }
+            QTextCursor cursor = mEditor->textCursor();
+            const int origin = cursor.position();
+            if (repeatCharacterMotion(cursor, key == ",", count))
+                applyRangeOperator(op, origin, cursor.position(), true);
         } else {
             mPendingOperator = Operator::None;
             const int count = mOperatorCount * takeCount();
@@ -547,19 +565,10 @@ bool VimModeController::handleNormal(const QString& key) {
     }
     if (key == ";" || key == ",") {
         const int count = takeCount();
-        if (mLastCharCommand != CharCommand::None) {
-            CharCommand command = mLastCharCommand;
-            if (key == ",") {
-                if (command == CharCommand::FindForward) command = CharCommand::FindBackward;
-                else if (command == CharCommand::FindBackward) command = CharCommand::FindForward;
-                else if (command == CharCommand::TillForward) command = CharCommand::TillBackward;
-                else if (command == CharCommand::TillBackward) command = CharCommand::TillForward;
-            }
-            QTextCursor cursor = mEditor->textCursor();
-            if (moveCharacter(cursor, mLastFindCharacter, command, count))
-                mEditor->setTextCursor(cursor);
-            normalizeNormalCursor();
-        }
+        QTextCursor cursor = mEditor->textCursor();
+        if (repeatCharacterMotion(cursor, key == ",", count))
+            mEditor->setTextCursor(cursor);
+        normalizeNormalCursor();
         return true;
     }
 
@@ -656,10 +665,18 @@ bool VimModeController::applyOperator(Operator op, const QString& motion, int co
 }
 
 void VimModeController::applyRangeOperator(Operator op, int origin, int destination, bool inclusive) {
-    if (destination > origin && inclusive)
-        ++destination;
-    else if (destination < origin && inclusive)
-        ++origin;
+    if (inclusive) {
+        QTextCursor boundary(mEditor->document());
+        if (destination > origin) {
+            boundary.setPosition(destination);
+            boundary.movePosition(QTextCursor::NextCharacter);
+            destination = boundary.position();
+        } else if (destination < origin) {
+            boundary.setPosition(origin);
+            boundary.movePosition(QTextCursor::NextCharacter);
+            origin = boundary.position();
+        }
+    }
     QTextCursor cursor(mEditor->document());
     cursor.setPosition(qBound(0, origin, cursor.document()->characterCount() - 1));
     cursor.setPosition(qBound(0, destination, cursor.document()->characterCount() - 1), QTextCursor::KeepAnchor);
@@ -976,6 +993,15 @@ bool VimModeController::applyTextObject(Operator op, bool inner, QChar object, i
     return true;
 }
 
+int VimModeController::visualActivePosition(const QTextCursor& cursor) const {
+    if (!cursor.hasSelection() || cursor.position() == cursor.selectionStart())
+        return cursor.position();
+    QTextCursor active(cursor.document());
+    active.setPosition(cursor.selectionEnd());
+    active.movePosition(QTextCursor::PreviousCharacter);
+    return active.position();
+}
+
 void VimModeController::updateVisualSelection() {
     QTextCursor cursor = mEditor->textCursor();
     int active = cursor.position();
@@ -1001,13 +1027,18 @@ void VimModeController::updateVisualSelection() {
             cursor.setPosition(activeEnd, QTextCursor::KeepAnchor);
         }
     } else {
-        const int documentEnd = cursor.document()->characterCount() - 1;
         if (active < mVisualAnchor) {
-            cursor.setPosition(qMin(mVisualAnchor + 1, documentEnd));
+            QTextCursor anchorEnd(cursor.document());
+            anchorEnd.setPosition(mVisualAnchor);
+            anchorEnd.movePosition(QTextCursor::NextCharacter);
+            cursor.setPosition(anchorEnd.position());
             cursor.setPosition(active, QTextCursor::KeepAnchor);
         } else {
+            QTextCursor activeEnd(cursor.document());
+            activeEnd.setPosition(active);
+            activeEnd.movePosition(QTextCursor::NextCharacter);
             cursor.setPosition(mVisualAnchor);
-            cursor.setPosition(qMin(active + 1, documentEnd), QTextCursor::KeepAnchor);
+            cursor.setPosition(activeEnd.position(), QTextCursor::KeepAnchor);
         }
     }
     mEditor->setTextCursor(cursor);
@@ -1018,7 +1049,7 @@ bool VimModeController::handleVisual(const QString& key) {
         CharCommand command = mPendingChar;
         mPendingChar = CharCommand::None;
         QTextCursor cursor = mEditor->textCursor();
-        int active = cursor.position() == cursor.selectionStart() ? cursor.selectionStart() : cursor.selectionEnd() - 1;
+        const int active = visualActivePosition(cursor);
         cursor.clearSelection();
         cursor.setPosition(active);
         if (moveCharacter(cursor, key.at(0), command, takeCount())) {
@@ -1032,7 +1063,8 @@ bool VimModeController::handleVisual(const QString& key) {
     if (mPendingTextObject) {
         const bool inner = mTextObjectInner;
         mPendingTextObject = false;
-        return applyTextObject(Operator::None, inner, key.at(0), takeCount(), true);
+        applyTextObject(Operator::None, inner, key.at(0), takeCount(), true);
+        return true;
     }
     if (key.size() == 1 && key.at(0).isDigit() && (key != "0" || mCount > 0)) {
         mCount = qMin(999999, mCount * 10 + key.toInt());
@@ -1055,17 +1087,17 @@ bool VimModeController::handleVisual(const QString& key) {
         if (key == "p") {
             const QString contents = sRegister;
             const bool linewise = sRegisterLinewise;
+            beginChangeEditBlock();
             applySelectionOperator(Operator::Delete);
             sRegister = contents;
             sRegisterLinewise = linewise;
             paste(true);
+            endChangeEditBlock();
         } else applySelectionOperator(op);
         return true;
     }
     QTextCursor cursor = mEditor->textCursor();
-    int active = cursor.position();
-    if (cursor.hasSelection())
-        active = cursor.position() == cursor.selectionStart() ? cursor.selectionStart() : cursor.selectionEnd() - 1;
+    const int active = visualActivePosition(cursor);
     cursor.clearSelection();
     cursor.setPosition(active);
     QString motion = key;
@@ -1079,10 +1111,12 @@ bool VimModeController::handleVisual(const QString& key) {
     const bool explicitCount = mCount > 0;
     const int count = takeCount();
     bool moved = false;
-    if (motion == "G" && explicitCount) {
+    if ((motion == "G" || motion == "gg") && explicitCount) {
         cursor.movePosition(QTextCursor::Start);
         cursor.movePosition(QTextCursor::NextBlock, QTextCursor::MoveAnchor, count - 1);
         moved = true;
+    } else if (motion == ";" || motion == ",") {
+        moved = repeatCharacterMotion(cursor, motion == ",", count);
     } else {
         moved = move(motion, cursor, QTextCursor::MoveAnchor, count);
     }
@@ -1223,7 +1257,7 @@ bool VimModeController::searchWord(bool forward) {
     while (end < text.size() && isWordCharacter(text.at(end))) ++end;
     sSearchPattern = QStringLiteral("\\b") + QRegularExpression::escape(text.mid(start, end - start)) + QStringLiteral("\\b");
     sSearchForward = forward;
-    return performSearch(sSearchPattern, forward, position);
+    return performSearch(sSearchPattern, forward, forward ? position : start);
 }
 
 void VimModeController::beginCommandRecording(const QString& key) {
@@ -1234,12 +1268,45 @@ void VimModeController::beginCommandRecording(const QString& key) {
     mCommandInsertActions.clear();
 }
 
+void VimModeController::cancelCommandRecording() {
+    mRecordingCommand = false;
+    mRecordingInsert = false;
+    mCommandKeys.clear();
+    mCommandInsertActions.clear();
+}
+
 void VimModeController::recordInsertKey(QKeyEvent* event) {
     const bool plainText = (event->modifiers() == Qt::NoModifier || event->modifiers() == Qt::ShiftModifier)
         && !event->text().isEmpty();
-    if (event->key() == Qt::Key_Backspace || event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter
-        || event->key() == Qt::Key_Tab || plainText)
+    if (event->key() == Qt::Key_Backspace || event->key() == Qt::Key_Delete || event->key() == Qt::Key_Return
+        || event->key() == Qt::Key_Enter || event->key() == Qt::Key_Tab || plainText)
         mCommandInsertActions.append({ event->key(), static_cast<int>(event->modifiers()), event->text() });
+}
+
+void VimModeController::completeInsertRepetitions(const QVector<InsertAction>& actions,
+                                                   bool initialInsertionApplied) {
+    const bool wasReplaying = mReplaying;
+    mReplaying = true;
+    const int repetitions = mOpenLineCount > 0 ? mOpenLineCount : mInsertCount;
+    for (int repetition = initialInsertionApplied ? 1 : 0; repetition < repetitions; ++repetition) {
+        if (mOpenLineCount > 0 && repetition > 0) {
+            QTextCursor cursor = mEditor->textCursor();
+            cursor.movePosition(QTextCursor::EndOfBlock);
+            cursor.insertBlock();
+            mEditor->setTextCursor(cursor);
+        }
+        for (const InsertAction& action : actions) {
+            QKeyEvent repeatedEvent(QEvent::KeyPress, action.key, Qt::KeyboardModifiers(action.modifiers), action.text);
+            QCoreApplication::sendEvent(mEditor, &repeatedEvent);
+        }
+    }
+    mReplaying = wasReplaying;
+    mInsertCount = 1;
+    mOpenLineCount = 0;
+    QTextCursor cursor = mEditor->textCursor();
+    if (cursor.positionInBlock() > 0)
+        cursor.movePosition(QTextCursor::PreviousCharacter);
+    mEditor->setTextCursor(cursor);
 }
 
 void VimModeController::finishCommandRecording() {
@@ -1263,17 +1330,7 @@ void VimModeController::repeatLastChange(int count) {
         for (QChar key : mLastChangeKeys)
             handleNormal(QString(key));
         if (mMode == Mode::Insert) {
-            for (int insertion = 0; insertion < mInsertCount; ++insertion) {
-                for (const InsertAction& action : mLastChangeInsertActions) {
-                    QKeyEvent event(QEvent::KeyPress, action.key, Qt::KeyboardModifiers(action.modifiers), action.text);
-                    QCoreApplication::sendEvent(mEditor, &event);
-                }
-            }
-            mInsertCount = 1;
-            QTextCursor cursor = mEditor->textCursor();
-            if (cursor.positionInBlock() > 0)
-                cursor.movePosition(QTextCursor::PreviousCharacter);
-            mEditor->setTextCursor(cursor);
+            completeInsertRepetitions(mLastChangeInsertActions, false);
             enterMode(Mode::Normal);
         }
     }
