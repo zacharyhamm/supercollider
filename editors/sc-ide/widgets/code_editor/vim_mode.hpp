@@ -13,8 +13,10 @@ public:
     enum class Mode { Normal, Insert, Visual, VisualLine };
 
     explicit VimModeController(QPlainTextEdit* editor);
+    ~VimModeController();
 
     bool handleKeyPress(QKeyEvent* event);
+    bool shouldOverrideShortcut(const QKeyEvent* event) const;
     void setEnabled(bool enabled);
     bool enabled() const { return mEnabled; }
     Mode mode() const { return mMode; }
@@ -35,6 +37,7 @@ private:
     bool applyOperator(Operator op, const QString& motion, int count);
     void applyRangeOperator(Operator op, int origin, int destination, bool inclusive);
     void applyLineOperator(Operator op, int count = 1);
+    void applyLineOperatorTo(Operator op, int targetBlock);
     void applySelectionOperator(Operator op);
     bool applyTextObject(Operator op, bool inner, QChar object, int count, bool visual);
     bool selectTextObject(QTextCursor& cursor, bool inner, QChar object, int count);
@@ -65,6 +68,8 @@ private:
     void finishCommandRecording();
     void recordInsertKey(QKeyEvent* event);
     void repeatLastChange(int count);
+    void beginChangeEditBlock();
+    void endChangeEditBlock();
 
     QPlainTextEdit* mEditor;
     Mode mMode { Mode::Normal };
@@ -90,7 +95,8 @@ private:
     bool mRecordingCommand { false };
     bool mRecordingInsert { false };
     bool mReplaying { false };
-    QString mCommandBefore;
+    bool mChangeEditBlockOpen { false };
+    int mCommandRevision { 0 };
     QString mCommandKeys;
     QString mCommandInsertText;
     QString mLastChangeKeys;

@@ -83,14 +83,10 @@ void ScCodeEditor::applySettings(Settings::Manager* settings) {
 bool ScCodeEditor::event(QEvent* e) {
     switch (e->type()) {
     case QEvent::ShortcutOverride: {
-        if (mVimMode->enabled()) {
-            QKeyEvent* ke = static_cast<QKeyEvent*>(e);
-            if (ke->key() == Qt::Key_Escape || ke->modifiers() == Qt::NoModifier
-                || ke->modifiers() == Qt::ShiftModifier
-                || (ke->modifiers() == Qt::ControlModifier && ke->key() == Qt::Key_R)) {
-                e->accept();
-                return true;
-            }
+        QKeyEvent* ke = static_cast<QKeyEvent*>(e);
+        if (mVimMode->shouldOverrideShortcut(ke)) {
+            e->accept();
+            return true;
         }
         break;
     }
@@ -98,6 +94,11 @@ bool ScCodeEditor::event(QEvent* e) {
         QKeyEvent* ke = static_cast<QKeyEvent*>(e);
         switch (ke->key()) {
         case Qt::Key_Tab:
+            if (mVimMode->enabled() && mVimMode->mode() != VimModeController::Mode::Insert
+                && mVimMode->handleKeyPress(ke)) {
+                e->accept();
+                return true;
+            }
             if (!tabChangesFocus()) {
                 indent();
                 e->accept();
